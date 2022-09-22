@@ -19,8 +19,8 @@ def denormalize_edges(page, edges):
 # doc = fitz.open("/home/dalanicolai/test.pdf")
 
 @server.register_function
-def test():
-    return (1, 2)
+def test(data):
+    return data.value()
 
 @server.register_function
 def open(doc_file):
@@ -47,9 +47,12 @@ def pagesizes():
     return [list(p.mediabox_size) for p in doc]
 
 @server.register_function
-def renderpage(page, width, *args):
-    global p
-    print(args)
+def renderpage_svg(page, text):
+    p = doc[page - 1]
+    return p.get_svg_image(fitz.Identity, bool(text))
+
+@server.register_function
+def renderpage_data(page, width, *args):
     p = doc[page - 1]
     if args:
         edges = fitz.Rect(denormalize_edges(page, args[2]))
@@ -69,15 +72,45 @@ def renderpage(page, width, *args):
     return base64.b64encode(pix.tobytes("png")).decode()
     # return pix.tobytes("png")
 
+def renderpage_file(page, width, path, *args):
+    p = doc[page - 1]
+    if args:
+        edges = fitz.Rect(denormalize_edges(page, args[2]))
+        # edges = p.search_for("and")
+        try:
+            # p.add_highlight_annot(edges)
+            p.draw_rect(edges, 0.5, 0.5, fill_opacity=0.5)
+        except ValueError:
+            print("Negelect this error")
+    zoom = width/p.mediabox_size[0]
+    mat = fitz.Matrix(zoom, zoom)
+    pix = p.get_pixmap(matrix=mat)
+    # p.clean_contents()
+        # mag = display_width / pix.width
+        # svg = page.get_svg_image(matrix=fitz.Matrix(mag, mag))
+    pix.save(path)
+
 @server.register_function
 def toc():
     return doc.get_toc()
 
 @server.register_function
+def metadata():
+    return doc.metadata
+
+@server.register_function
+# def addannot(page, style, edges):
 def addannot(page, style, edges):
-    p = doc[page]
-    edges = fitz.Rect(denormalize_edges(page, edges))
-    p.add_highlight_annot(edges)
+    p = doc[page - 1]
+    match style.value():
+        case "highlight":
+            p.add_highlight_annot(edges)
+        case "line":
+            p.add_line_annot(edges[0:2], edges[2:4])
+    return edges
+    # edges = fitz.Rect(denormalize_edges(page, edges))
+    # p.add_highlight_annot(edges)
+    # p.add_caret_annot(fitz.Rect(72, 72, 220, 100).tl)
 
 @server.register_function
 def editannot():

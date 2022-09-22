@@ -34,6 +34,7 @@
 
 (defvar pymupdf-epc-info-commands '(pymupdf-epc-number-of-pages
                                     pymupdf-epc-toc
+                                    pymupdf-epc-metadata
                                     pymupdf-epc-page-structured-text))
 
 (defsubst list-to-cons (pair-list)
@@ -69,7 +70,7 @@
 
 (defun pymupdf-epc-test ()
   (interactive)
-  (pp (epc:call-sync pymupdf-epc-server 'test nil)))
+  (pp (epc:call-sync pymupdf-epc-server 'test (list 'hello))))
 
 (defun pymupdf-epc-init (&optional file)
   (interactive "fSelect pdf file: ")
@@ -80,25 +81,49 @@
   (epc:call-sync pymupdf-epc-server 'number_of_pages nil))
 
 (defun pymupdf-epc-page-structured-text (&optional page detail)
-  (interactive "nEnter page number: ")
-  (epc:call-sync pymupdf-epc-server 'page_structured_text (list page (symbol-name detail))))
+  (interactive (let ((last-page (pymupdf-epc-number-of-pages)))
+                 (list (read-number (format "Select page(s) (max %s): " last-page)
+                                    (or (scrap-current-page) 1))
+                       (completing-read "Select detail: "
+                                        '(plain blocks words xml)))))
+  (when (symbolp detail) (setq detail (symbol-name detail)))
+  (when (string= detail "plain") (setq detail "nil"))
+  (epc:call-sync pymupdf-epc-server 'page_structured_text (list page detail)))
 
 (defun pymupdf-epc-page-sizes ()
   (interactive)
   (let ((sizes (epc:call-sync pymupdf-epc-server 'pagesizes nil)))
         (mapcar #'list-to-cons sizes)))
 
+(defun pymupdf-epc-page-svg-data (page text)
+  (interactive "nEnter page number: ")
+  (epc:call-sync pymupdf-epc-server 'renderpage_svg (list page text)))
+
 (defun pymupdf-epc-page-base64-image-data (page width)
   (interactive "nEnter page number: ")
-  (epc:call-sync pymupdf-epc-server 'renderpage (list page width)))
+  (epc:call-sync pymupdf-epc-server 'renderpage_data (list page width)))
+
+(defun pymupdf-epc-page-image-file (page width path)
+  (interactive "nEnter page number: ")
+  (epc:call-sync pymupdf-epc-server 'renderpage_file (list page width path)))
 
 (defun pymupdf-epc-toc ()
   (interactive)
   (epc:call-sync pymupdf-epc-server 'toc nil))
 
+(defun pymupdf-epc-metadata ()
+  (interactive)
+  (epc:call-sync pymupdf-epc-server 'metadata nil))
+
 (defun pymupdf-epc-get-annots (page)
   (interactive "nEnter page number: ")
   (epc:call-sync pymupdf-epc-server 'get_annots (list page)))
+
+(defun pymupdf-epc-add-annot (page style edges)
+  (interactive "nEnter page number: ")
+  (epc:call-sync pymupdf-epc-server 'addannot (list page style edges)))
+
+;; (defun pymupdf-)
 
 (provide 'pymupdf-epc-client)
 ;;; pymupdf-epc-client.el ends here
