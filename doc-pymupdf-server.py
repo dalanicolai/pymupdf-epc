@@ -3,6 +3,7 @@ import fitz
 import base64
 
 from epc.server import EPCServer
+from sexpdata import Symbol
 
 server = EPCServer(('localhost', 0))
 
@@ -37,10 +38,39 @@ def close():
 def number_of_pages():
     return len(doc)
 
+def parse_structured_text(d, t):
+    match t:
+        case "page":
+            return [Symbol("page"), 0, 0, d['width'], d['height'],
+                    *parse_structured_text(d['blocks'], "blocks")]
+        case "blocks":
+            return [[Symbol("block"),
+                     *i['bbox'],
+                     *parse_structured_text(i['lines'], "lines")]
+                    for i in d if 'lines' in i]
+        case "lines":
+            return [[Symbol("line"),
+                     *i['bbox'],
+                     *parse_structured_text(i['spans'], "spans")]
+                    for i in d if 'spans' in i]
+        case "spans":
+            return [[Symbol("span"),
+                     *i['bbox'],
+                     *parse_structured_text(i['chars'], "chars")]
+                    for i in d if 'chars' in i]
+        case "chars":
+            return [[Symbol("char"), *i['bbox'], i['c']] for i in d]
+
 @server.register_function
 def page_structured_text(page=None, detail="words"):
-    text = doc[page - 1].get_text(detail) if page else [p.get_text(detail) for p in doc]
-    return text
+    if detail == 'djvu':
+        text = doc[page - 1].get_text('rawdict') if page else [p.get_text('rawdict') for p in doc]
+    else:
+        text = doc[page - 1].get_text(detail) if page else [p.get_text(detail) for p in doc]
+    if detail == 'djvu':
+        return parse_structured_text(text, "page")
+    else:
+        return text
 
 @server.register_function
 def pagesizes():
