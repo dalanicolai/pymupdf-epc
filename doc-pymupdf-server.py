@@ -1,6 +1,8 @@
 #!/usr/bin/env python
-import fitz
 import base64
+import re
+
+import fitz
 
 from epc.server import EPCServer
 from sexpdata import Symbol
@@ -74,7 +76,7 @@ def page_structured_text(page=None, detail="words"):
 
 @server.register_function
 def pagesizes():
-    return [list((p.cropbox[2] - p.cropbox[0], p.cropbox[3] - p.cropbox[1])) for p in doc]
+    return [list(p.rect[2:4]) for p in doc]
 
 @server.register_function
 def renderpage_svg(page, text):
@@ -187,101 +189,16 @@ def getselection(page):
     return [[j[i]/size[0] if i in [0,2] else j[i]/size[1] for i in range(0,4)] for j in p.get_text("blocks")]
 
 @server.register_function
-def doublet_png(page, display_width):
-    bottom_page = doc[page+1]
-    shape = bottom_page.new_shape()
-    line_start = bottom_page.rect.top_left
-    line_end = bottom_page.rect.top_right
-    shape.draw_line(line_start, line_end)
-    shape.finish(color=(0, 0, 0), fill=(0, 0, 0))
-    shape.commit()
-
-    mag = display_width / bottom_page.rect.bottom_right.x
-    mat = matrix=fitz.Matrix(mag, mag)
-
-    pix = [doc[page].get_pixmap(matrix=mat),
-           bottom_page.get_pixmap(matrix=mat)]
-
-    tar_w = max(pix[0].width,pix[1].width)
-    tar_h = pix[0].height + pix[1].height
-
-    doublet = fitz.Pixmap(fitz.Colorspace(fitz.CS_RGB), (0, 0, tar_w, tar_h))
-
-    for j in range(2):
-        pix[j].set_origin(0, pix[j].height * j)
-        doublet.copy(pix[j], pix[j].irect) # copy input to new loc
-
-    imbytes = doublet.tobytes("ppm")  # extremely fast!
-
-    imbytes64 = base64.b64encode(imbytes)
-    return imbytes64.decode("utf-8")
+def search(pattern, start_page, end_page):
+    start_page = start_page or 1
+    end_page = end_page or doc.last_location[1] + 1
+    results = [[list(x) for x in doc[p].search_for(pattern)] for p in range(start_page, end_page)]
+    return [(i,x) for i,x in enumerate(results, 1) if x]
 
 @server.register_function
-def page_svg(page, display_width):
-    page = doc[page]
-    pix = page.get_pixmap()
-    mag = display_width / pix.width
-    svg = page.get_svg_image(matrix=fitz.Matrix(mag, mag))
-    # svg = page.get_svg_image(matrix=fitz.Identity)
-    return svg
-
-def svg_get_groups(svg):
-    size = svg.split(" width=")[1].split(" viewBox")[0].split(" height=")
-    trim_left = "<g".join(svg.split("<g")[1:])
-    svg_groups = "</g>".join(trim_left.split("</g>"[:-1]))
-    return [int(i) for i in size], svg_groups
-
-
-@server.register_function
-def page_triplet(page, display_width):
-    # top, mid, bot = page-1, page, page+1
-    p = [doc[page-1], doc[page], doc[page+1]]
-    pix = [i.get_pixmap() for i in p]
-    mag = [display_width / i.width for i in pix]
-    svg_width = [v.width * mag[i] for i,v in enumerate(pix)]
-    svg_height = [v.height * mag[i] for i,v in enumerate(pix)]
-    start_height = 0
-
-    def page_data(page, display_width):
-        nonlocal start_height
-        svg = [page.get_svg_image(matrix=fitz.Matrix(mag[0], mag[0])) for i, page in enumerate(p)]
-        svg_body = []
-
-        for i, svg in enumerate(svg):
-            start = svg.find("<g ")
-            end = svg.rfind("</g>")
-            # svg_body.append(svg[start:end+len('</g>')])
-            line = f"<line x1='0' y1='{start_height}' x2='{svg_width[i]}' y2='{start_height}' stroke='black'/>"
-            g_string = f"<g transform=\"translate(0 {start_height})\" "
-            # svg_body.append(svg[start:end+len('</g>')].replace("<g transform=\"", g_string, 1))
-            svg_body.append(line + svg[start:end+len('</g>')].replace("<g ", g_string, 1))
-            start_height += svg_height[i]
-        d = (f'<svg width="{svg_width[0]}" height="{svg_height[0]*len(svg_body)}" '
-             f'version="1.1" xmlns="http://www.w3.org/2000/svg" '
-             f'xmlns:xlink="http://www.w3.org/1999/xlink"></svg>'
-             )
-        svg_head_tail = d.split("><")
-
-        s = svg_head_tail[0] + '>' \
-            + " <rect width='100%' height='100%' fill='white'/>\n" \
-            + ''.join(svg_body) \
-            + '<' + svg_head_tail[1]
-        return svg_height, s
-
-    return page, page_data(page, display_width)
-
-    # svg = page.get_svg_image(matrix=fitz.Identity)
-    # size = svg.split(" width=")[1].split(" viewBox")[0].split(" height=")
-    # pages = [doc[1], doc[2], doc[3]]
-    # pages_svg = [i.get_svg_image() for i in pages]
-    # page_size_string = [svg_size(i) for i in pages_svg]
-    # pages_data = [page_data(i, display_width) for i in [page-1, page, page+1]]
-
-    # float(page_size_string[0][1][1:-3])
-
-# def start():
-#     server.print_port()
-#     server.serve_forever()
+def swipe(pattern):
+    return [[(i,x) for x in p.get_text('blocks') if re.search(pattern, x[4], re.IGNORECASE)]
+            for i,p in enumerate(doc, 1)]
 
 server.print_port()
 server.serve_forever()

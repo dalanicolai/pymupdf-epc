@@ -154,7 +154,13 @@
   (interactive "nEnter page number: ")
   (epc:call-sync doc-pymupdf-server 'addannot (list page style edges)))
 
-;; (defun pymupdf-)
+(defun doc-pymupdf-search (pattern &optional start-page end-page)
+  (interactive "nEnter pattern: ")
+  (epc:call-sync doc-pymupdf-server 'search (list pattern start-page end-page)))
+
+(defun doc-pymupdf-swipe (pattern)
+  (interactive "nEnter pattern: ")
+  (epc:call-sync doc-pymupdf-server 'swipe (list pattern)))
 
 (provide 'doc-pymupdf-client)
 ;;; doc-pymupdf-client.el ends here
