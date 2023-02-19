@@ -74,7 +74,7 @@ def page_structured_text(page=None, detail="words"):
 
 @server.register_function
 def pagesizes():
-    return [list(p.mediabox_size) for p in doc]
+    return [list((p.cropbox[2] - p.cropbox[0], p.cropbox[3] - p.cropbox[1])) for p in doc]
 
 @server.register_function
 def renderpage_svg(page, text):
