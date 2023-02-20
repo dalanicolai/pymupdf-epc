@@ -176,13 +176,14 @@ def getselection(page):
 def search(pattern, start_page, end_page):
     start_page = start_page or 1
     end_page = end_page or doc.last_location[1] + 1
-    results = [[list(x) for x in doc[p].search_for(pattern)] for p in range(start_page, end_page)]
-    return [(i,x) for i,x in enumerate(results, 1) if x]
+    results = [[list(x) for x in doc[p].search_for(pattern)] for p in range(start_page - 1, end_page - 1)]
+    return [[i,*x] for i,x in enumerate(results, 1) if x]
 
 @server.register_function
 def swipe(pattern):
-    return [[(i,x) for x in p.get_text('blocks') if re.search(pattern, x[4], re.IGNORECASE)]
-            for i,p in enumerate(doc, 1)]
+    return [x for x in [[i] + [b for b in p.get_text('blocks') if re.search(pattern, b[4], re.IGNORECASE)]
+                        for i,p in enumerate(doc, 1)]
+            if x[1:]]
 
 server.print_port()
 server.serve_forever()
