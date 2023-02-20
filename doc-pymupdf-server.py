@@ -9,15 +9,15 @@ from sexpdata import Symbol
 
 server = EPCServer(('localhost', 0))
 
-def normalize_edges(page, edges):
-    "Transform vimura edges to (normalized) pdf-tools edges."
-    size = doc[page - 1].mediabox_size
-    return [edges[i]/size[0] if i in [0,2] else edges[i]/size[1] for i in range(0,4)]
+# def normalize_edges(page, edges):
+#     "Transform vimura edges to (normalized) pdf-tools edges."
+#     size = doc[page - 1].mediabox_size
+#     return [edges[i]/size[0] if i in [0,2] else edges[i]/size[1] for i in range(0,4)]
 
-def denormalize_edges(page, edges):
-    "Transform (normalized) pdf-tools edges to vimura edges."
-    size = doc[page - 1].mediabox_size
-    return [edges[i]*size[0] if i in [0,2] else edges[i]*size[1] for i in range(0,4)]
+# def denormalize_edges(page, edges):
+#     "Transform (normalized) pdf-tools edges to vimura edges."
+#     size = doc[page - 1].mediabox_size
+#     return [edges[i]*size[0] if i in [0,2] else edges[i]*size[1] for i in range(0,4)]
 
 # doc = fitz.open("/home/dalanicolai/test.pdf")
 
@@ -84,17 +84,9 @@ def renderpage_svg(page, text):
     return p.get_svg_image(fitz.Identity, bool(text))
 
 @server.register_function
-def renderpage_data(page, width, *args):
+def renderpage_data(page, width):
     p = doc[page - 1]
-    if args:
-        edges = fitz.Rect(denormalize_edges(page, args[2]))
-        # edges = p.search_for("and")
-        try:
-            # p.add_highlight_annot(edges)
-            p.draw_rect(edges, 0.5, 0.5, fill_opacity=0.5)
-        except ValueError:
-            print("Negelect this error")
-    zoom = width/p.mediabox_size[0]
+    zoom = width/p.rect[2]
     mat = fitz.Matrix(zoom, zoom)
     pix = p.get_pixmap(matrix=mat)
     # p.clean_contents()
@@ -106,15 +98,7 @@ def renderpage_data(page, width, *args):
 
 def renderpage_file(page, width, path, *args):
     p = doc[page - 1]
-    if args:
-        edges = fitz.Rect(denormalize_edges(page, args[2]))
-        # edges = p.search_for("and")
-        try:
-            # p.add_highlight_annot(edges)
-            p.draw_rect(edges, 0.5, 0.5, fill_opacity=0.5)
-        except ValueError:
-            print("Negelect this error")
-    zoom = width/p.mediabox_size[0]
+    zoom = width/p.rect[2]
     mat = fitz.Matrix(zoom, zoom)
     pix = p.get_pixmap(matrix=mat)
     # p.clean_contents()
