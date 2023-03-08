@@ -4,6 +4,7 @@ import re
 
 import fitz
 
+from fitz.utils import getColor, getColorList
 from epc.server import EPCServer
 from sexpdata import Symbol
 
@@ -64,15 +65,17 @@ def parse_structured_text(d, t):
             return [[Symbol("char"), *i['bbox'], i['c']] for i in d]
 
 @server.register_function
-def page_structured_text(page=None, detail="words"):
-    if detail == 'djvu':
-        text = doc[page - 1].get_text('rawdict') if page else [p.get_text('rawdict') for p in doc]
-    else:
-        text = doc[page - 1].get_text(detail) if page else [p.get_text(detail) for p in doc]
-    if detail == 'djvu':
-        return parse_structured_text(text, "page")
-    else:
-        return text
+def structured_text(start_page, end_page, detail):
+    start_page = start_page or 0
+    end_page = end_page or len(doc)
+    detail =  detail or "words"
+    return [doc[p].get_text(detail) for p in range(start_page, end_page)]
+    # return page
+    # if detail == 'djvu':
+    #     text = doc[page - 1].get_text('rawdict') if page else [p.get_text('rawdict') for p in doc]
+    #     return parse_structured_text(text, "page")
+    # else:
+    #     return doc[page - 1].get_text(detail) if page else [p.get_text(detail) for p in doc]
 
 @server.register_function
 def pagesizes():
@@ -84,7 +87,7 @@ def renderpage_svg(page, text):
     return p.get_svg_image(fitz.Identity, bool(text))
 
 @server.register_function
-def renderpage_data(page, width):
+def renderpage_base64(page, width):
     p = doc[page - 1]
     zoom = width/p.rect[2]
     mat = fitz.Matrix(zoom, zoom)
@@ -116,14 +119,15 @@ def metadata():
 
 @server.register_function
 # def addannot(page, style, edges):
-def addannot(page, style, edges):
+def addannot(page, edges, style, return_pagedata=False, page_width=False):
     p = doc[page - 1]
     match style.value():
         case "highlight":
-            p.add_highlight_annot(edges)
+            a = p.add_highlight_annot(edges)
         case "line":
-            p.add_line_annot(edges[0:2], edges[2:4])
-    return edges
+            a = p.add_line_annot(edges[0:2], edges[2:4])
+    if return_pagedata:
+        return renderpage_data(page, page_width) 
     # edges = fitz.Rect(denormalize_edges(page, edges))
     # p.add_highlight_annot(edges)
     # p.add_caret_annot(fitz.Rect(72, 72, 220, 100).tl)
@@ -172,16 +176,33 @@ def getselection(page):
     size = doc[page].mediabox_size
     return [[j[i]/size[0] if i in [0,2] else j[i]/size[1] for i in range(0,4)] for j in p.get_text("blocks")]
 
-@server.register_function
-def search(pattern, start_page, end_page):
-    start_page = start_page or 1
-    end_page = end_page or doc.last_location[1] + 1
-    results = [[list(x) for x in doc[p].search_for(pattern)] for p in range(start_page - 1, end_page - 1)]
-    return [[i,*x] for i,x in enumerate(results, 1) if x]
+search_results = []
 
 @server.register_function
-def swipe(pattern):
-    return [x for x in [[i] + [b for b in p.get_text('blocks') if re.search(pattern, b[4], re.IGNORECASE)]
+def search(pattern):
+    results = []
+    for n,p in enumerate(doc):
+        for r in p.search_for(pattern):
+            a = p.add_circle_annot(r)
+            a.set_colors(fill=(1,0,0))
+            a.set_opacity(0.5)
+            a.update()
+            results.append([n, list(r)])
+    return [[i] + p for i,p in enumerate(results,1)]
+
+@server.register_function
+def list_colors():
+    return getColorList()
+# @server.register_function
+# def search(pattern, start_page, end_page):
+#     start_page = start_page or 1
+#     end_page = end_page or doc.last_location[1] + 1
+#     results = [[list(x) for x in doc[p].search_for(pattern)] for p in range(start_page - 1, end_page - 1)]
+#     return [[i,*x] for i,x in enumerate(results, 1) if x]
+
+@server.register_function
+def text_blocks():
+    return [x for x in [[i] + [b for b in p.get_text('blocks')] # if re.search(pattern, b[4], re.IGNORECASE)]
                         for i,p in enumerate(doc, 1)]
             if x[1:]]
 
